@@ -1,38 +1,35 @@
 #!/usr/bin/env node
 
 const bookmarks = require("./lib/db/bookmarks");
-const amqp = require("amqplib/callback_api");
+const amqp = require("amqplib");
 
-function showError(err, conn) {
-  console.log(err);
-  conn.close();
-  return process.exit(1);
-}
+async function publish() {
+  try {
+    const conn = await amqp.connect("amqp://localhost");
+    const ch = await conn.createChannel();
+    const q = "bookmarks";
+    const interval = 1000;
 
-amqp.connect("amqp://localhost", function(err, conn) {
-  if (err) return showError(err, conn);
+    await ch.assertQueue(q, { durable: false });
 
-  conn.createChannel(function(err, ch) {
-    if (err) return showError(err, conn);
+    console.log(" [*] Queuing bookmarks in %s every %sms. To exit press CTRL+C", q, interval);
 
-    var q = "bookmarks";
-    ch.assertQueue(q, { durable: false }, function (err, ok) {
-      if (err) return showError(err, conn);
-
-      // Note: on Node 6 Buffer.from(msg) should be used
-      // ch.sendToQueue(q, new Buffer("Hello World!"));
-      // console.log(" [x] Sent 'Hello World!'");
-
-      bookmarks.findAll(function(err, result) {
+    let queueBookmarks = () => {
+      bookmarks.findAll((err, bookmarks) => {
+        console.log(" [*] Queuing %s bookmarks", bookmarks.length);
         if (err) return showError(err, conn);
 
-        result.forEach((bookmark) => {
-          ch.sendToQueue(q, new Buffer(JSON.stringify(bookmark)));
+        bookmarks.forEach((bookmark) => {
+          ch.sendToQueue(q, Buffer.from(JSON.stringify(bookmark)));
         });
-
-        conn.close();
-        process.exit(0);
       });
-    });
-  });
-});
+    };
+
+    setInterval(queueBookmarks, interval);
+  } catch (e) {
+    console.log(e);
+    conn.close();
+  }
+}
+
+publish();
