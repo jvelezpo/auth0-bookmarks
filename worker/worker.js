@@ -8,7 +8,7 @@ async function work() {
     const ch = await conn.createChannel();
     const q = "bookmarks";
 
-    ch.assertQueue(q, { durable: false});
+    await ch.assertQueue(q, { durable: false });
 
     console.log(" [*] Waiting for messages in %s. To exit press CTRL+C", q);
     ch.consume(q, function(bookmark) {
